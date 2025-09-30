@@ -1,6 +1,6 @@
 import { jsPDF, TextOptionsLight } from "jspdf";
 import autotable, { UserOptions } from "jspdf-autotable";
-import { promises as fs } from 'fs';
+import { promises as fs, readFileSync, statSync } from 'fs';
 import * as path from 'path';
 import { PDFDocument } from 'pdf-lib'
 
@@ -519,6 +519,7 @@ export class DocumentGenerator {
   private readonly fontManager: FontManager;
   private readonly templateProcessor: TemplateProcessor;
   private readonly cursorManager: CursorManager;
+  private pathFile: string;
   public _configPath?: string;
   public _configObject?: DocumentConfig;
   constructor(private inputConfig?: string | undefined) {
@@ -857,13 +858,11 @@ export class DocumentGenerator {
   //#endregion
 
   //#region generateDocument
-  public async generateDocument(params: DocumentParams) {
+  public async generateDocument(params: DocumentParams): Promise<string> {
     try {
-
-
       await this.ensureConfig(); // read the config json file
       await this.initDoc(); // prepares the doc obj and the cursor
-
+      this.pathFile = params.nomeFile;
       // Parse contents
       for (const block of this.contenuti) {
         let finalCur = { x: NaN, y: NaN };
@@ -1047,6 +1046,7 @@ export class DocumentGenerator {
       if (params.allegaDocDopo || params.allegaDocPrima)
         await this.mergeDocument(params);
 
+      return this.document;
     } catch (error) {
       console.error(error);
     }
@@ -1098,4 +1098,20 @@ export class DocumentGenerator {
     await fs.writeFile(params.nomeFile, await mergedPdf.save());
   }
   //#endregion
+
+
+  /**
+   * @returns base64 string from read Buffer of pdf 
+   */
+  get document(): string {
+    try {
+      console.log("name file ", this.pathFile);
+      const stat = statSync(this.pathFile);
+      console.log("Stat: ", stat, "File?", stat.isFile())
+      if (!stat.isFile()) throw new Error("Path does not point to a file");
+      return readFileSync(this.pathFile, {encoding: 'base64'});
+    } catch (error) {
+      console.error("GET Document: ", error);
+    }
+  }
 }

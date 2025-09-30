@@ -99,6 +99,7 @@ async function testDocumentGenerator() {
 
     try {
         const output = await generator.generateDocument(params);
+        const file = generator.document;
         console.log("Document generated successfully:", output);
     } catch (error) {
         console.error("Error generating document:", error);

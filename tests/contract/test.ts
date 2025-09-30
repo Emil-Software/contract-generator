@@ -1,4 +1,6 @@
-import { DocumentGenerator, DocumentParams, DocumentConfig } from '../../ContractGenerator';
+import { DocumentParams } from '../../interfaces/content';
+import { DocumentConfig } from '../../interfaces/doc';
+import { DocumentGenerator } from '../../ContractGenerator';
 
 async function testDocumentGenerator() {
     const generator = new DocumentGenerator('test.json');

@@ -166,383 +166,172 @@ type HAlign = "center" | "left" | "right" | "justify";
 
 type VAlign = "top" | "bottom" | "middle";
 
-async function loadImageAsBase64(imagePath: string): Promise<string> {
-  const absolutePath = path.resolve(imagePath);
-  const buffer = await fs.readFile(absolutePath);
-  const ext = path.extname(imagePath).slice(1).toLowerCase();
-  const base64 = buffer.toString('base64');
-  return `data:image/${ext};base64,${base64}`;
-}
+type ConfigData = {
+  template: DocumentConfig;
+  pageSettings: PageSettings;
+  contenuti: Partial<Content>[];
+};
 
-export class DocumentGenerator {
-  private template!: DocumentConfig;
-  private config!: PageSettings;
-  private contenuti!: Partial<Content>[];
-  private doc!: jsPDF;
-  private curX: number = 0;
-  private curY: number = 0;
-  private configLoaded: boolean = false;
-  //#region flag Debug
-  private debugActive: boolean = false;
-  //#endregion
-  public _configPath: string;
-  public _configObject: DocumentConfig;
-  constructor(private inputConfig?: string | undefined) { }
+class ConfigService {
+  private readonly configPath?: string;
+  private template?: DocumentConfig;
+  private pageSettings?: PageSettings;
+  private contenuti?: Partial<Content>[];
+  private configLoaded = false;
 
-  public setConfig(config: DocumentConfig) {
-    this.config = config.impostazioniPagina;
+  constructor(configPath?: string) {
+    this.configPath = configPath;
+  }
+
+  public setConfig(config: DocumentConfig): void {
+    this.template = config;
+    this.pageSettings = this.applyMarginDefaults(config.impostazioniPagina);
+    this.contenuti = config.contenuti;
     this.configLoaded = true;
   }
 
+  public async loadConfig(): Promise<ConfigData> {
+    if (this.configLoaded) {
+      return this.getConfigData();
+    }
+    if (!this.configPath) {
+      throw new Error("No configuration provided.");
+    }
+    try {
+      const data = await fs.readFile(this.configPath, 'utf8');
+      const template = JSON.parse(data) as DocumentConfig;
+      this.template = template;
+      this.pageSettings = this.applyMarginDefaults(template.impostazioniPagina);
+      this.contenuti = template.contenuti;
+      this.configLoaded = true;
+      return this.getConfigData();
+    } catch (error) {
+      throw new Error(`Error reading configuration file: ${error}`);
+    }
+  }
 
-  //#region setter
-  private set yCursor(param: {yPosition: number, offsetX?: number}) {
-    // this.debugCursor('#DC143C')
-    const yPosition = param.yPosition;
-    const maxY = this.doc.internal.pageSize.getHeight() - this.config.margini.basso;
-    if (
-      yPosition >= this.config.margini.alto &&
-      yPosition <= maxY
-    ) {
-      this.curY = yPosition;
-    } else if (yPosition > maxY) {
-      console.log("adding new page ");
-      this.doc.addPage();
-      this.curY = this.config.margini.alto;
-      this.curX = this.config.margini.sx;
-      if (param.offsetX) {
-        this.curX += param.offsetX;
+  public getConfigData(): ConfigData {
+    if (!this.template || !this.pageSettings || !this.contenuti) {
+      throw new Error('Configuration not loaded.');
+    }
+    return {
+      template: this.template,
+      pageSettings: this.pageSettings,
+      contenuti: this.contenuti,
+    };
+  }
+
+  public getConfigPath(): string | undefined {
+    return this.configPath;
+  }
+
+  private applyMarginDefaults(pageSettings: PageSettings): PageSettings {
+    const defaultMargins = {
+      sx: 8,
+      dx: 8,
+      alto: 8,
+      basso: 8,
+    };
+    const margini = pageSettings.margini ?? defaultMargins;
+    return {
+      ...pageSettings,
+      margini: {
+        sx: margini.sx ?? defaultMargins.sx,
+        dx: margini.dx ?? defaultMargins.dx,
+        alto: margini.alto ?? defaultMargins.alto,
+        basso: margini.basso ?? defaultMargins.basso,
+      },
+    };
+  }
+}
+
+class FontManager {
+  private fonts: DocumentFont[] = [];
+
+  public updateFonts(fonts: DocumentFont[]): void {
+    this.fonts = fonts ?? [];
+  }
+
+  public async initialize(doc: jsPDF): Promise<void> {
+    const fontList = doc.getFontList();
+    for (const font of this.fonts) {
+      if (!fontList[font.nome] && font.installPath) {
+        const styles = font.style ? font.style.split(',') : ['normal'];
+        const paths = font.installPath.split(',');
+        for (let i = 0; i < paths.length; i++) {
+          const style = styles[i] ? styles[i].trim() : styles[0].trim();
+          await this.installFont(paths[i].trim(), font.nome, style, doc);
+        }
       }
-    } else {
-      throw new Error(`${yPosition} is not a valid position for y coordinate`);
-    }
-    // this.debugCursor('#96dc14');
-  }
-
-  private set xCursor(xPosition: number) {
-    const maxX = this.doc.internal.pageSize.getWidth() - this.config.margini.dx;
-    if (
-      xPosition >= this.config.margini.sx &&
-      xPosition <= maxX
-    ) {
-      this.curX = xPosition;
-    } else if (xPosition > maxX) {
-      console.log("new line");
-      this.yCursor = {yPosition: (this.curY + (this.doc.getFontSize() * this.config.interlinea / 72) * 25.4)};
-      this.curX = this.config.margini.sx;
-    } else {
-      throw new Error(`${xPosition} is not a valid position for x coordinate`);
-    }
-  }
-  //#endregion
-
-  /**
-   * get the position of the cursor in a new line below the actual.
-   */
-  get yNewLine() {
-    const newY = this.curY + (this.doc.getFontSize() * this.config.interlinea / 72) * 25.4
-    if (newY > this.doc.internal.pageSize.getHeight() - this.config.margini.basso) {
-      this.doc.addPage();
-      this.curY = this.config.margini.alto;
-      this.curX = this.config.margini.sx;
-
-      return this.curY;
-    } else return newY;
-  }
-  //#region debug
-  private debugCursor(inputColor?: string, label?: string) {
-    const noise = Math.random();
-    console.log(`cusor X:(${this.curX.toFixed(4)}), Y:(${this.curY.toFixed(4)}) *** noise: ${noise}`);
-    if (this.debugActive) {
-      const color = this.doc.getDrawColor();
-      const txtColor = this.doc.getTextColor();
-      if (inputColor) {
-        this.doc.setTextColor(inputColor);
-        this.doc.setDrawColor(inputColor);
-      }
-      else this.doc.setDrawColor('green');
-      this.doc.line(this.curX - 2 + noise, this.curY + noise * .1, this.curX + 2, this.curY);
-      this.doc.line(this.curX + noise, this.curY - 2 + noise * .1, this.curX, this.curY + 2);
-      const txtSize = this.doc.getFontSize();
-      this.doc.setFontSize(5);
-      if (label) this.doc.text(label, this.curX, this.curY);
-      this.doc.setDrawColor(color);
-      this.doc.setTextColor(txtColor);
-      this.doc.setFontSize(txtSize);
     }
   }
 
-  private debugMargini() {
-    if (this.debugActive) {
-
-      /// debug
-      console.log("debug: righe margini");
-      const color = this.doc.getDrawColor();
-      this.doc.setDrawColor("green");
-      //hzo alto
-      this.doc.line(
-        this.config.margini.sx,
-        this.config.margini.alto,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.config.margini.alto,
-      );
-      // vert sx
-      this.doc.line(
-        this.config.margini.sx,
-        this.config.margini.alto,
-        this.config.margini.sx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      // vert dx
-      this.doc.line(
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.config.margini.alto,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      // hzo basso
-      this.doc.line(
-        this.config.margini.sx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      this.doc.setDrawColor(color);
+  public setupText(doc: jsPDF, fonts: DocumentFont[], fontId: string = 'default'): DocumentFont {
+    let font = fonts.find(font => font.id === fontId);
+    if (!font) {
+      console.warn(`no font found with the id ${fontId}`);
+      font = { nome: 'courier', dimensione: 5, id: 'no configuration', colore: '#000000' } as DocumentFont;
     }
+    doc.setFont(font.nome, 'normal');
+    doc.setFontSize(font.dimensione);
+    doc.setTextColor(font.colore ? font.colore : undefined);
+    return font;
   }
-  //#endregion
 
-  /**
-   * # applyTemplate
-   * 
-   * Replaces tag `$content$` with dynamic field that has the same key
-   * @param template 
-   * @param dynamicFields 
-   * @returns 
-   */
-  //#region applyTemplate
-  private applyTemplate(template: string, dynamicFields?: { [key: string]: string }): string {
+  private async installFont(fontPath: string, fontName: string, style: string = 'normal', doc: jsPDF): Promise<void> {
+    const absolutePath = path.resolve(fontPath);
+    const buffer = await fs.readFile(absolutePath);
+    const base64Font = buffer.toString('base64');
+    doc.addFileToVFS(`${fontName}.ttf`, base64Font);
+    doc.addFont(`${fontName}.ttf`, fontName, style);
+    doc.setFont(fontName, style as any);
+  }
+}
+
+class TemplateProcessor {
+  private readonly tagRegex = /<\|(.*?)\|>/g;
+
+  public stripFormattingTags(text: string): string {
+    return text?.replace(this.tagRegex, "").trim();
+  }
+
+  public applyTemplate(template: string, dynamicFields?: { [key: string]: string }): string {
     if (!dynamicFields) return template;
     return template.replace(/\$(\w+)\$/g, (match, key) =>
       dynamicFields[key] !== undefined ? dynamicFields[key] : match
     );
   }
-  //#endregion
 
-  //#region applyPartiPlaceholders
-  private applyPartiPlaceholders(text: string, parti: IPartiContratto): string {
+  public applyPartiPlaceholders(text: string, parti?: IPartiContratto): string {
+    if (!parti) {
+      return text;
+    }
     return text.replace(/\$(fornitore|cliente):(\w+)\$/g, (match, party, field) =>
       (parti[party] && (parti[party] as any)[field]) ? (parti[party] as any)[field] : match
     );
   }
-  //#endregion
 
-  //#region loadConfig
-  private async loadConfig(): Promise<void> {
-    if (this.configLoaded) return;
-    if (!this.inputConfig) throw new Error("No configuration provided.");
-    try {
-      const data = await fs.readFile(this.inputConfig, 'utf8');
-      this.template = JSON.parse(data) as DocumentConfig;
-      this.config = this.template.impostazioniPagina;
-      this.config.margini = {
-        sx: this.template.impostazioniPagina.margini?.sx ? this.template.impostazioniPagina.margini.sx : 8,
-        dx: this.template.impostazioniPagina.margini?.dx ? this.template.impostazioniPagina.margini.dx : 8,
-        alto: this.template.impostazioniPagina.margini?.alto ? this.template.impostazioniPagina.margini.alto : 8,
-        basso: this.template.impostazioniPagina.margini?.basso ? this.template.impostazioniPagina.margini.basso : 8,
-      }
-      this.contenuti = this.template.contenuti;
-      this.configLoaded = true;
-    } catch (error) {
-      throw new Error(`Error reading configuration file: ${error}`);
+  public getTagConfigurations(text: string): string[][] {
+    const matches = Array.from(text.matchAll(this.tagRegex));
+    return matches.map(match =>
+      match[1]
+        .trim()
+        .split(';')
+        .map(segment => segment.trim())
+        .filter(Boolean)
+    );
+  }
+
+  public parseKeyValue(tagContent: string): [string, string] | null {
+    if (!tagContent.includes(':')) {
+      return null;
     }
-  }
-  //#endregion
-
-
-  //#region initDoc
-  /**
-   * # initDoc
-   * 
-   * initialize the jsPDF object, set the margins and the cursor, installs the fonts
-   */
-  private async initDoc(): Promise<void> {
-    try {
-      this.doc = new jsPDF();
-
-      const margins = this.config.margini;
-      this.curX = margins.sx ? margins.sx : 10;
-      this.curY = margins.alto ? margins.alto : 10;
-      console.log("Init cursor: ", this.curX, this.curY);
-      const fontList = this.doc.getFontList();
-      for (const font of this.config.fonts) {
-        // console.log("Font List: ", fontList, " Font selected ", font.nome)
-        if (!fontList[font.nome]) {
-          if (font.installPath) {
-            let styles = font.style.split(',');
-            let paths = font.installPath.split(',');
-            for (let i = 0; i < styles.length; i++) {
-              await this.installFont(paths[i].trim(), font.nome, styles[i].trim());
-            }
-          }
-        }
-      }
-      console.log("updated font list ", this.doc.getFontList());
-
-      //////////////////////////////////////////////////////////////////////////
-      this.debugMargini();
-    } catch (error) {
-      throw error;
-    }
+    const [key, value] = tagContent.split(':').map(s => s.trim());
+    return [key, value];
   }
 
-  //#region setupText
-  private setupText(fontId: string = 'default'): void {
-    let font = this.config.fonts.find(font => font.id === fontId);
-    if (!font) {
-      console.warn(`no font found with the id ${fontId}`);
-      font = { nome: 'courier', dimensione: 5, id: 'no configuration', colore: '#000000' };
-    }
-    // console.log("Il font definito in config", font);
-    this.doc.setFont(font.nome, 'normal');
-    this.doc.setFontSize(font.dimensione);
-    this.doc.setTextColor(font.colore ? font.colore : undefined);
-  }
-
-  private extractPlaceholder(text: string): string | null {
-    const match = text.match(/^\$(\w+)\$$/);
-    return match ? match[1] : null;
-  }
-
-  //#region installFont
-  private async installFont(fontPath: string, fontName: string, style: string = 'normal'): Promise<void> {
-    const absolutePath = path.resolve(fontPath);
-    // console.log(`Installing font ${fontName} from ${absolutePath}`);
-    const buffer = await fs.readFile(absolutePath);
-    const base64Font = buffer.toString('base64');
-    // console.log(`this.doc.addFileToVFS ${fontName}.ttf`, "base64Font");
-    this.doc.addFileToVFS(`${fontName}.ttf`, base64Font);
-    this.doc.addFont(`${fontName}.ttf`, fontName, style);
-    this.doc.setFont(fontName);
-  }
-  //#endregion
-
-  //#region writePageNumber
-  private writePageNumber(label: string, totPages?: string, fontId?: string,) {
-    const pages = this.doc.internal.pages;
-    // console.log("pages",pages);
-    for (let p = 1; p < pages.length; p++) {
-      this.doc.setPage(p);
-      this.setupText(fontId);
-      let strlabel = label ? label : 'Pagina';
-      strlabel += ` ${p}`;
-      if (totPages) {
-        strlabel += ` ${totPages} ${pages.length - 1}`
-      }
-      let position = {
-        x: this.doc.internal.pageSize.getWidth() *0.5,
-        y: this.doc.internal.pageSize.getHeight() - 10
-      };
-      this.doc.text(strlabel, position.x, position.y, { align: 'center', baseline: 'hanging' });
-    }
-  }
-  //#endregion
-
-
-  //#region insertImage
-  // Inserts images using the current cursor position.
-  private async insertImage(imgParam: ImageParams): Promise<{ x: number; y: number }> {
-    try {
-      let startX = this.curX;
-      let startY = this.curY;
-      // this.debugCursor('#FF00FF', 'imageStart');
-      if (imgParam.posizione) {
-        startX += imgParam.posizione[0];
-        startY += imgParam.posizione[1];
-      }
-
-      const format = imgParam.path.split('.').pop()?.toUpperCase() || 'PNG';
-      const base64Image = await loadImageAsBase64(imgParam.path);
-      if (startY + imgParam.dimensioni[1] > (this.doc.internal.pageSize.getHeight() - this.config.margini.basso)) {
-        this.doc.addPage();
-        this.curY = this.config.margini.alto;
-        startY = this.curY + imgParam.posizione[1];
-      }
-      this.doc.addImage(base64Image, format, startX, startY, imgParam.dimensioni[0], imgParam.dimensioni[1]);
-      this.yCursor = {yPosition: (startY + imgParam.dimensioni[1])};
-      this.xCursor = this.curX + imgParam.dimensioni[0];
-      //this.xCursor = this.curX + startX + imgParam.dimensioni[0];
-      // this.debugCursor('#2fff00', 'imageEnd');
-      return { x: this.curX, y: this.curY }
-    } catch (error) {
-      console.error(error);
-    }
-  }
-  //#endregion
-
-  /**
-   * # parseText 
-   * trova i tag di formattazine, li rimuove dal testo e ritorna un oggetto con le impostazioni
-   * passate nei tag
-   * @param text 
-   * @returns 
-   */
-  //#region parseText
-  private parseText(text: string, params: DocumentParams): FormattedText {
-    const tagRegex = /<\|(.*?)\|>/g;  // Trova i tag <|...|>
-    let content = text?.replace(tagRegex, "").trim(); // Rimuove i tag e lascia solo il testo principale
-    content = this.applyTemplate(content, params.dynamicFields);
-    content = this.applyPartiPlaceholders(content, params.parti);
-    let formattedText: FormattedText = { content };
-    // Trova tutti i tag e processali
-    const matched = Array.from(text.matchAll(tagRegex));
-    for (const match of matched) {
-      const tags = match[1].trim().split(';'); // Esclude i delimitatori <| e |>
-      for (const tagContent of tags) {
-        if (tagContent.includes(":")) {
-          const [key, value] = tagContent.split(":").map(s => s.trim());
-          switch (key) {
-            case "fontId":
-              formattedText.fontId = value;
-              break;
-            case "hAlign":
-              formattedText.hAlign = value as HAlign;
-              break;
-            case "vAlign":
-              formattedText.vAlign = value as VAlign;
-              break;
-            case "offsetX":
-              const offX = Number(value);
-              if (Number.isNaN(offX)) throw new Error("OffsetX is not a number");
-              formattedText.offsetX = offX
-              break;
-            case "offsetY":
-              const offY = Number(value);
-              if (Number.isNaN(offY)) throw new Error("OffsetY is not a number");
-              formattedText.offsetY = offY;
-              console.log("offsetY", offY);
-              break;
-            case "allinea":
-              if (value === 'centra') {
-                this.xCursor = this.doc.internal.pageSize.getWidth() / 2;
-                // formattedText.hAlign = 'center';
-                formattedText.centra = true;
-              } /* else if(value === 'destra') {
-                
-              } */ else {
-                console.warn("invalid value passed to 'allinea'");
-              }
-          }
-        }
-      }
-    }
-    return formattedText;
-  }
-
-
-  //#region parseSections
-  private parseBoldSections(content: string): SectionsText[] {
-    let sections: SectionsText[] = []
+  public parseBoldSections(content: string): SectionsText[] {
+    let sections: SectionsText[] = [];
     let index = 0;
     let matches = Array.from(content.matchAll(/\*\*(.*?)\*\*/g));
     if (matches.length === 0) {
@@ -581,6 +370,353 @@ export class DocumentGenerator {
       }
     }
     return sections;
+  }
+}
+
+class CursorManager {
+  private curX: number = 0;
+  private curY: number = 0;
+  private doc!: jsPDF;
+  private config!: PageSettings;
+  private debugActive: boolean = false;
+
+  public initialize(doc: jsPDF, config: PageSettings): void {
+    this.doc = doc;
+    this.config = config;
+    const margins = this.config.margini ?? { sx: 10, dx: 10, alto: 10, basso: 10 };
+    this.curX = margins.sx ?? 10;
+    this.curY = margins.alto ?? 10;
+  }
+
+  public setDebugActive(active: boolean): void {
+    this.debugActive = active;
+  }
+
+  public get currentX(): number {
+    return this.curX;
+  }
+
+  public set currentX(value: number) {
+    this.curX = value;
+  }
+
+  public get currentY(): number {
+    return this.curY;
+  }
+
+  public set currentY(value: number) {
+    this.curY = value;
+  }
+
+  public moveY(param: { yPosition: number; offsetX?: number }): void {
+    const maxY = this.doc.internal.pageSize.getHeight() - this.config.margini.basso;
+    if (param.yPosition >= this.config.margini.alto && param.yPosition <= maxY) {
+      this.curY = param.yPosition;
+    } else if (param.yPosition > maxY) {
+      this.doc.addPage();
+      this.curY = this.config.margini.alto;
+      this.curX = this.config.margini.sx;
+      if (param.offsetX) {
+        this.curX += param.offsetX;
+      }
+    } else {
+      throw new Error(`${param.yPosition} is not a valid position for y coordinate`);
+    }
+  }
+
+  public advanceX(xPosition: number): void {
+    const maxX = this.doc.internal.pageSize.getWidth() - this.config.margini.dx;
+    if (xPosition >= this.config.margini.sx && xPosition <= maxX) {
+      this.curX = xPosition;
+    } else if (xPosition > maxX) {
+      this.moveY({ yPosition: this.getNewLine(this.config.interlinea), offsetX: undefined });
+      this.curX = this.config.margini.sx;
+    } else {
+      throw new Error(`${xPosition} is not a valid position for x coordinate`);
+    }
+  }
+
+  public getNewLine(interlinea: number): number {
+    const newY = this.curY + (this.doc.getFontSize() * interlinea / 72) * 25.4;
+    if (newY > this.doc.internal.pageSize.getHeight() - this.config.margini.basso) {
+      this.doc.addPage();
+      this.curY = this.config.margini.alto;
+      this.curX = this.config.margini.sx;
+      return this.curY;
+    }
+    return newY;
+  }
+
+  public debugCursor(inputColor?: string, label?: string): void {
+    const noise = Math.random();
+    console.log(`cusor X:(${this.curX.toFixed(4)}), Y:(${this.curY.toFixed(4)}) *** noise: ${noise}`);
+    if (this.debugActive) {
+      const color = this.doc.getDrawColor();
+      const txtColor = this.doc.getTextColor();
+      if (inputColor) {
+        this.doc.setTextColor(inputColor);
+        this.doc.setDrawColor(inputColor);
+      }
+      else this.doc.setDrawColor('green');
+      this.doc.line(this.curX - 2 + noise, this.curY + noise * .1, this.curX + 2, this.curY);
+      this.doc.line(this.curX + noise, this.curY - 2 + noise * .1, this.curX, this.curY + 2);
+      const txtSize = this.doc.getFontSize();
+      this.doc.setFontSize(5);
+      if (label) this.doc.text(label, this.curX, this.curY);
+      this.doc.setDrawColor(color);
+      this.doc.setTextColor(txtColor);
+      this.doc.setFontSize(txtSize);
+    }
+  }
+
+  public debugMargins(): void {
+    if (this.debugActive) {
+      const color = this.doc.getDrawColor();
+      this.doc.setDrawColor("green");
+      this.doc.line(
+        this.config.margini.sx,
+        this.config.margini.alto,
+        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
+        this.config.margini.alto,
+      );
+      this.doc.line(
+        this.config.margini.sx,
+        this.config.margini.alto,
+        this.config.margini.sx,
+        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
+      );
+      this.doc.line(
+        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
+        this.config.margini.alto,
+        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
+        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
+      );
+      this.doc.line(
+        this.config.margini.sx,
+        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
+        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
+        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
+      );
+      this.doc.setDrawColor(color);
+    }
+  }
+}
+
+async function loadImageAsBase64(imagePath: string): Promise<string> {
+  const absolutePath = path.resolve(imagePath);
+  const buffer = await fs.readFile(absolutePath);
+  const ext = path.extname(imagePath).slice(1).toLowerCase();
+  const base64 = buffer.toString('base64');
+  return `data:image/${ext};base64,${base64}`;
+}
+
+export class DocumentGenerator {
+  private template!: DocumentConfig;
+  private config!: PageSettings;
+  private contenuti!: Partial<Content>[];
+  private doc!: jsPDF;
+  private readonly configService: ConfigService;
+  private readonly fontManager: FontManager;
+  private readonly templateProcessor: TemplateProcessor;
+  private readonly cursorManager: CursorManager;
+  public _configPath?: string;
+  public _configObject?: DocumentConfig;
+  constructor(private inputConfig?: string | undefined) {
+    this.configService = new ConfigService(inputConfig);
+    this.fontManager = new FontManager();
+    this.templateProcessor = new TemplateProcessor();
+    this.cursorManager = new CursorManager();
+    this._configPath = inputConfig;
+  }
+
+  public setConfig(config: DocumentConfig) {
+    this.configService.setConfig(config);
+    this.syncConfigData(this.configService.getConfigData());
+    this._configObject = this.template;
+    this._configPath = this.configService.getConfigPath();
+  }
+
+
+  private async ensureConfig(): Promise<void> {
+    const data = await this.configService.loadConfig();
+    this.syncConfigData(data);
+    this._configObject = this.template;
+    this._configPath = this.configService.getConfigPath();
+  }
+
+  private syncConfigData(data: ConfigData): void {
+    this.template = data.template;
+    this.config = data.pageSettings;
+    this.contenuti = data.contenuti;
+    this.fontManager.updateFonts(this.config.fonts);
+  }
+
+
+  //#region setter
+  private set yCursor(param: { yPosition: number; offsetX?: number }) {
+    this.cursorManager.moveY(param);
+  }
+
+  private set xCursor(xPosition: number) {
+    this.cursorManager.advanceX(xPosition);
+  }
+
+  private get curX(): number {
+    return this.cursorManager.currentX;
+  }
+
+  private set curX(value: number) {
+    this.cursorManager.currentX = value;
+  }
+
+  private get curY(): number {
+    return this.cursorManager.currentY;
+  }
+
+  private set curY(value: number) {
+    this.cursorManager.currentY = value;
+  }
+  //#endregion
+
+  /**
+   * get the position of the cursor in a new line below the actual.
+   */
+  get yNewLine() {
+    return this.cursorManager.getNewLine(this.config.interlinea);
+  }
+  //#region debug
+  private debugCursor(inputColor?: string, label?: string) {
+    this.cursorManager.debugCursor(inputColor, label);
+  }
+
+  private debugMargini() {
+    this.cursorManager.debugMargins();
+  }
+  //#endregion
+
+  //#region initDoc
+  private async initDoc(): Promise<void> {
+    try {
+      this.doc = new jsPDF();
+      this.cursorManager.initialize(this.doc, this.config);
+      await this.fontManager.initialize(this.doc);
+      this.debugMargini();
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private setupText(fontId: string = 'default'): void {
+    this.fontManager.setupText(this.doc, this.config.fonts, fontId);
+  }
+
+  private writePageNumber(label: string, totPages?: string, fontId?: string) {
+    const pages = this.doc.internal.pages;
+    for (let p = 1; p < pages.length; p++) {
+      this.doc.setPage(p);
+      this.setupText(fontId);
+      let strlabel = label ? label : 'Pagina';
+      strlabel += ` ${p}`;
+      if (totPages) {
+        strlabel += ` ${totPages} ${pages.length - 1}`;
+      }
+      let position = {
+        x: this.doc.internal.pageSize.getWidth() * 0.5,
+        y: this.doc.internal.pageSize.getHeight() - 10
+      };
+      this.doc.text(strlabel, position.x, position.y, { align: 'center', baseline: 'hanging' });
+    }
+  }
+  //#endregion
+
+  //#region insertImage
+
+  private async insertImage(imgParam: ImageParams): Promise<{ x: number; y: number }> {
+    try {
+      let startX = this.curX;
+      let startY = this.curY;
+      if (imgParam.posizione) {
+        startX += imgParam.posizione[0];
+        startY += imgParam.posizione[1];
+      }
+
+      const format = imgParam.path.split('.').pop()?.toUpperCase() || 'PNG';
+      const base64Image = await loadImageAsBase64(imgParam.path);
+      if (startY + imgParam.dimensioni[1] > (this.doc.internal.pageSize.getHeight() - this.config.margini.basso)) {
+        this.doc.addPage();
+        this.curY = this.config.margini.alto;
+        startY = this.curY + (imgParam.posizione ? imgParam.posizione[1] : 0);
+      }
+      this.doc.addImage(base64Image, format, startX, startY, imgParam.dimensioni[0], imgParam.dimensioni[1]);
+      this.yCursor = { yPosition: (startY + imgParam.dimensioni[1]) };
+      this.xCursor = this.curX + imgParam.dimensioni[0];
+      return { x: this.curX, y: this.curY };
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  //#endregion
+
+  /**
+   * # parseText
+   * trova i tag di formattazine, li rimuove dal testo e ritorna un oggetto con le impostazioni
+   * passate nei tag
+   * @param text 
+   * @returns 
+   */
+  //#region parseText
+  private parseText(text: string, params: DocumentParams): FormattedText {
+    const contentWithoutTags = this.templateProcessor.stripFormattingTags(text);
+    let content = this.templateProcessor.applyTemplate(contentWithoutTags, params.dynamicFields);
+    content = this.templateProcessor.applyPartiPlaceholders(content, params.parti);
+    let formattedText: FormattedText = { content };
+    const tagGroups = this.templateProcessor.getTagConfigurations(text);
+    for (const tags of tagGroups) {
+      for (const tagContent of tags) {
+        const keyValue = this.templateProcessor.parseKeyValue(tagContent);
+        if (!keyValue) {
+          continue;
+        }
+        const [key, value] = keyValue;
+        switch (key) {
+          case "fontId":
+            formattedText.fontId = value;
+            break;
+          case "hAlign":
+            formattedText.hAlign = value as HAlign;
+            break;
+          case "vAlign":
+            formattedText.vAlign = value as VAlign;
+            break;
+          case "offsetX":
+            const offX = Number(value);
+            if (Number.isNaN(offX)) throw new Error("OffsetX is not a number");
+            formattedText.offsetX = offX;
+            break;
+          case "offsetY":
+            const offY = Number(value);
+            if (Number.isNaN(offY)) throw new Error("OffsetY is not a number");
+            formattedText.offsetY = offY;
+            break;
+          case "allinea":
+            if (value === 'centra') {
+              this.xCursor = this.doc.internal.pageSize.getWidth() / 2;
+              formattedText.centra = true;
+            } else {
+              console.warn("invalid value passed to 'allinea'");
+            }
+            break;
+        }
+      }
+    }
+    return formattedText;
+  }
+
+
+  //#region parseSections
+  private parseBoldSections(content: string): SectionsText[] {
+    return this.templateProcessor.parseBoldSections(content);
   }
   //#endregion
 
@@ -725,7 +861,7 @@ export class DocumentGenerator {
     try {
 
 
-      await this.loadConfig(); // read the config json file  
+      await this.ensureConfig(); // read the config json file
       await this.initDoc(); // prepares the doc obj and the cursor
 
       // Parse contents

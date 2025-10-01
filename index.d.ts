@@ -1,3 +1,4 @@
 import { autobind } from "./autobind";
 import { DocumentGenerator } from "./ContractGenerator";
-export { autobind, DocumentGenerator };
+import { TemplateGenerator } from "./services/TemplateGenerator";
+export { autobind, DocumentGenerator, TemplateGenerator };

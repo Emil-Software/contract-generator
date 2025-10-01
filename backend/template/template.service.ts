@@ -3,6 +3,8 @@ import { TemplateGenerator } from '../../services/TemplateGenerator';
 import { CreateTemplateDto, CreateTemplateResponse } from './dto/create-template.dto';
 import { UpdateTemplateDto, UpdateTemplateResponse } from './dto/update-template.dto';
 import { DocumentConfig } from '../../interfaces/doc';
+import { GenerateDocumentDto, GenerateDocumentResponse } from './dto/generate-document.dto';
+import { DocumentGenerator } from '../../ContractGenerator';
 
 @Injectable()
 export class TemplateService {
@@ -57,5 +59,35 @@ export class TemplateService {
     }
 
     return { template };
+  }
+
+  async generateDocument(dto: GenerateDocumentDto): Promise<GenerateDocumentResponse> {
+    if (!dto.params) {
+      throw new BadRequestException('params is required to generate a document.');
+    }
+
+    if (!dto.config && !dto.configPath) {
+      throw new BadRequestException('Either config or configPath must be provided to generate a document.');
+    }
+
+    const generator = new DocumentGenerator(dto.configPath);
+
+    if (dto.config) {
+      generator.setConfig(dto.config);
+    }
+
+    try {
+      const document = await generator.generateDocument(dto.params);
+      if (!document) {
+        throw new Error('Document generation failed.');
+      }
+
+      return {
+        document,
+        filePath: dto.params.nomeFile,
+      };
+    } catch (error) {
+      throw new BadRequestException(`Unable to generate document: ${error instanceof Error ? error.message : error}`);
+    }
   }
 }

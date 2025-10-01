@@ -25,9 +25,30 @@ Libreria che genera pdf con la possibilità di inserire testi, immagini, elenchi
 
 ## Funzionamento
 
-I dati che vanno a generare il documento arrivano da due oggetti: `DocumentParams` e `DocumentConfig`. 
+I dati che vanno a generare il documento arrivano da due oggetti: `DocumentParams` e `DocumentConfig`.
 - `DocumentConfig` costituisce lo scheletro rigido del documento e fornisce quindi la struttura di base definendo la posizione e gli stili degli elementi nel pdf
 - `DocumentParams` viene passato dinamicamente ogni volta che si genera un documento e contiene i dati variabili come nomi, date, dati contenuti nelle tabelle ecc..
+
+
+
+## API backend NestJS
+
+Per facilitare l'utilizzo del nuovo servizio `TemplateGenerator` è stato aggiunto un micro-backend basato su [NestJS](https://nestjs.com/).
+L'applicazione espone tre endpoint REST sotto il prefisso `/api`:
+
+| Metodo | Endpoint         | Descrizione |
+| ------ | ---------------- | ----------- |
+| `POST` | `/api/templates` | Crea un nuovo template JSON, opzionalmente persistendolo su disco. |
+| `GET`  | `/api/templates` | Carica il template da un percorso JSON esistente (`?path=/percorso/file.json`). |
+| `PATCH`| `/api/templates` | Aggiorna un file di configurazione esistente con il payload fornito. |
+
+### Avvio in locale
+
+1. Installare le dipendenze del progetto.
+2. Eseguire la build TypeScript (`npm run build`).
+3. Avviare il server con `node dist/backend/main.js` (porta di default `3000`, configurabile tramite `PORT`).
+
+Ogni endpoint restituisce il template aggiornato e, quando viene effettuato il salvataggio, anche il percorso del file.
 
 
 

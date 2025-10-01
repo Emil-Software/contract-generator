@@ -42,6 +42,8 @@ L'applicazione espone tre endpoint REST sotto il prefisso `/api`:
 | `GET`  | `/api/templates` | Carica il template da un percorso JSON esistente (`?path=/percorso/file.json`). |
 | `PATCH`| `/api/templates` | Aggiorna un file di configurazione esistente con il payload fornito. |
 
+La documentazione interattiva degli endpoint è disponibile tramite [Swagger UI](https://swagger.io/tools/swagger-ui/) all'indirizzo `http://localhost:3000/api/docs` (o `http://localhost:<PORT>/api/docs`).
+
 ### Avvio in locale
 
 1. Installare le dipendenze del progetto.

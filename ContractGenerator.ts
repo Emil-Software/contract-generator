@@ -1,350 +1,16 @@
 import { jsPDF, TextOptionsLight } from "jspdf";
 import autotable, { UserOptions } from "jspdf-autotable";
 import { promises as fs, readFileSync, statSync } from 'fs';
-import * as path from 'path';
-import { PDFDocument } from 'pdf-lib'
+import { PDFDocument } from 'pdf-lib';
 import { IPartiContratto, DocumentParams } from "./interfaces/content";
-import { DocumentConfig, PageSettings, Content, ConfigData, DocumentFont, SectionsText, ImageParams, FormattedText, HAlign, VAlign, Elenco } from "./interfaces/doc";
+import { DocumentConfig, PageSettings, Content, ConfigData, ImageParams, FormattedText, HAlign, VAlign, Elenco } from "./interfaces/doc";
+import { ConfigService } from "./services/ConfigService";
+import { FontManager } from "./services/FontManager";
+import { TemplateProcessor } from "./services/TemplateProcessor";
+import { CursorManager } from "./services/CursorManager";
+import { loadImageAsBase64 } from "./utils/image";
 
 
-
-class ConfigService {
-  private readonly configPath?: string;
-  private template?: DocumentConfig;
-  private pageSettings?: PageSettings;
-  private contenuti?: Partial<Content>[];
-  private configLoaded = false;
-
-  constructor(configPath?: string) {
-    this.configPath = configPath;
-  }
-
-  public setConfig(config: DocumentConfig): void {
-    this.template = config;
-    this.pageSettings = this.applyMarginDefaults(config.impostazioniPagina);
-    this.contenuti = config.contenuti;
-    this.configLoaded = true;
-  }
-
-  public async loadConfig(): Promise<ConfigData> {
-    if (this.configLoaded) {
-      return this.getConfigData();
-    }
-    if (!this.configPath) {
-      throw new Error("No configuration provided.");
-    }
-    try {
-      const data = await fs.readFile(this.configPath, 'utf8');
-      const template = JSON.parse(data) as DocumentConfig;
-      this.template = template;
-      this.pageSettings = this.applyMarginDefaults(template.impostazioniPagina);
-      this.contenuti = template.contenuti;
-      this.configLoaded = true;
-      return this.getConfigData();
-    } catch (error) {
-      throw new Error(`Error reading configuration file: ${error}`);
-    }
-  }
-
-  public getConfigData(): ConfigData {
-    if (!this.template || !this.pageSettings || !this.contenuti) {
-      throw new Error('Configuration not loaded.');
-    }
-    return {
-      template: this.template,
-      pageSettings: this.pageSettings,
-      contenuti: this.contenuti,
-    };
-  }
-
-  public getConfigPath(): string | undefined {
-    return this.configPath;
-  }
-
-  private applyMarginDefaults(pageSettings: PageSettings): PageSettings {
-    const defaultMargins = {
-      sx: 8,
-      dx: 8,
-      alto: 8,
-      basso: 8,
-    };
-    const margini = pageSettings.margini ?? defaultMargins;
-    return {
-      ...pageSettings,
-      margini: {
-        sx: margini.sx ?? defaultMargins.sx,
-        dx: margini.dx ?? defaultMargins.dx,
-        alto: margini.alto ?? defaultMargins.alto,
-        basso: margini.basso ?? defaultMargins.basso,
-      },
-    };
-  }
-}
-
-class FontManager {
-  private fonts: DocumentFont[] = [];
-
-  public updateFonts(fonts: DocumentFont[]): void {
-    this.fonts = fonts ?? [];
-  }
-
-  public async initialize(doc: jsPDF): Promise<void> {
-    const fontList = doc.getFontList();
-    for (const font of this.fonts) {
-      if (!fontList[font.nome] && font.installPath) {
-        const styles = font.style ? font.style.split(',') : ['normal'];
-        const paths = font.installPath.split(',');
-        for (let i = 0; i < paths.length; i++) {
-          const style = styles[i] ? styles[i].trim() : styles[0].trim();
-          await this.installFont(paths[i].trim(), font.nome, style, doc);
-        }
-      }
-    }
-  }
-
-  public setupText(doc: jsPDF, fonts: DocumentFont[], fontId: string = 'default'): DocumentFont {
-    let font = fonts.find(font => font.id === fontId);
-    if (!font) {
-      console.warn(`no font found with the id ${fontId}`);
-      font = { nome: 'courier', dimensione: 5, id: 'no configuration', colore: '#000000' } as DocumentFont;
-    }
-    doc.setFont(font.nome, 'normal');
-    doc.setFontSize(font.dimensione);
-    doc.setTextColor(font.colore ? font.colore : undefined);
-    return font;
-  }
-
-  private async installFont(fontPath: string, fontName: string, style: string = 'normal', doc: jsPDF): Promise<void> {
-    const absolutePath = path.resolve(fontPath);
-    const buffer = await fs.readFile(absolutePath);
-    const base64Font = buffer.toString('base64');
-    doc.addFileToVFS(`${fontName}.ttf`, base64Font);
-    doc.addFont(`${fontName}.ttf`, fontName, style);
-    doc.setFont(fontName, style as any);
-  }
-}
-
-class TemplateProcessor {
-  private readonly tagRegex = /<\|(.*?)\|>/g;
-
-  public stripFormattingTags(text: string): string {
-    return text?.replace(this.tagRegex, "").trim();
-  }
-
-  public applyTemplate(template: string, dynamicFields?: { [key: string]: string }): string {
-    if (!dynamicFields) return template;
-    return template.replace(/\$(\w+)\$/g, (match, key) =>
-      dynamicFields[key] !== undefined ? dynamicFields[key] : match
-    );
-  }
-
-  public applyPartiPlaceholders(text: string, parti?: IPartiContratto): string {
-    if (!parti) {
-      return text;
-    }
-    return text.replace(/\$(fornitore|cliente):(\w+)\$/g, (match, party, field) =>
-      (parti[party] && (parti[party] as any)[field]) ? (parti[party] as any)[field] : match
-    );
-  }
-
-  public getTagConfigurations(text: string): string[][] {
-    const matches = Array.from(text.matchAll(this.tagRegex));
-    return matches.map(match =>
-      match[1]
-        .trim()
-        .split(';')
-        .map(segment => segment.trim())
-        .filter(Boolean)
-    );
-  }
-
-  public parseKeyValue(tagContent: string): [string, string] | null {
-    if (!tagContent.includes(':')) {
-      return null;
-    }
-    const [key, value] = tagContent.split(':').map(s => s.trim());
-    return [key, value];
-  }
-
-  public parseBoldSections(content: string): SectionsText[] {
-    let sections: SectionsText[] = [];
-    let index = 0;
-    let matches = Array.from(content.matchAll(/\*\*(.*?)\*\*/g));
-    if (matches.length === 0) {
-      sections.push({
-        text: content,
-        type: 'normal',
-        start: 0,
-        end: content.length
-      });
-    } else {
-      while (index < content.length) {
-        for (const match of matches) {
-          if (index !== match['index']) {
-            sections.push({
-              text: content.substring(index, match['index']),
-              type: 'normal',
-              start: index,
-              end: match['index']
-            });
-          }
-          sections.push({
-            text: content.substring(match['index'], match['index'] + match[0].length),
-            type: 'bold',
-            start: match['index'],
-            end: match['index'] + match[0].length
-          });
-          index = match['index'] + match[0].length;
-        }
-        sections.push({
-          text: content.substring(index, content.length),
-          type: 'normal',
-          start: index,
-          end: content.length - 1
-        });
-        index = content.length;
-      }
-    }
-    return sections;
-  }
-}
-
-class CursorManager {
-  private curX: number = 0;
-  private curY: number = 0;
-  private doc!: jsPDF;
-  private config!: PageSettings;
-  private debugActive: boolean = false;
-
-  public initialize(doc: jsPDF, config: PageSettings): void {
-    this.doc = doc;
-    this.config = config;
-    const margins = this.config.margini ?? { sx: 10, dx: 10, alto: 10, basso: 10 };
-    this.curX = margins.sx ?? 10;
-    this.curY = margins.alto ?? 10;
-  }
-
-  public setDebugActive(active: boolean): void {
-    this.debugActive = active;
-  }
-
-  public get currentX(): number {
-    return this.curX;
-  }
-
-  public set currentX(value: number) {
-    this.curX = value;
-  }
-
-  public get currentY(): number {
-    return this.curY;
-  }
-
-  public set currentY(value: number) {
-    this.curY = value;
-  }
-
-  public moveY(param: { yPosition: number; offsetX?: number }): void {
-    const maxY = this.doc.internal.pageSize.getHeight() - this.config.margini.basso;
-    if (param.yPosition >= this.config.margini.alto && param.yPosition <= maxY) {
-      this.curY = param.yPosition;
-    } else if (param.yPosition > maxY) {
-      this.doc.addPage();
-      this.curY = this.config.margini.alto;
-      this.curX = this.config.margini.sx;
-      if (param.offsetX) {
-        this.curX += param.offsetX;
-      }
-    } else {
-      throw new Error(`${param.yPosition} is not a valid position for y coordinate`);
-    }
-  }
-
-  public advanceX(xPosition: number): void {
-    const maxX = this.doc.internal.pageSize.getWidth() - this.config.margini.dx;
-    if (xPosition >= this.config.margini.sx && xPosition <= maxX) {
-      this.curX = xPosition;
-    } else if (xPosition > maxX) {
-      this.moveY({ yPosition: this.getNewLine(this.config.interlinea), offsetX: undefined });
-      this.curX = this.config.margini.sx;
-    } else {
-      throw new Error(`${xPosition} is not a valid position for x coordinate`);
-    }
-  }
-
-  public getNewLine(interlinea: number): number {
-    const newY = this.curY + (this.doc.getFontSize() * interlinea / 72) * 25.4;
-    if (newY > this.doc.internal.pageSize.getHeight() - this.config.margini.basso) {
-      this.doc.addPage();
-      this.curY = this.config.margini.alto;
-      this.curX = this.config.margini.sx;
-      return this.curY;
-    }
-    return newY;
-  }
-
-  public debugCursor(inputColor?: string, label?: string): void {
-    const noise = Math.random();
-    console.log(`cusor X:(${this.curX.toFixed(4)}), Y:(${this.curY.toFixed(4)}) *** noise: ${noise}`);
-    if (this.debugActive) {
-      const color = this.doc.getDrawColor();
-      const txtColor = this.doc.getTextColor();
-      if (inputColor) {
-        this.doc.setTextColor(inputColor);
-        this.doc.setDrawColor(inputColor);
-      }
-      else this.doc.setDrawColor('green');
-      this.doc.line(this.curX - 2 + noise, this.curY + noise * .1, this.curX + 2, this.curY);
-      this.doc.line(this.curX + noise, this.curY - 2 + noise * .1, this.curX, this.curY + 2);
-      const txtSize = this.doc.getFontSize();
-      this.doc.setFontSize(5);
-      if (label) this.doc.text(label, this.curX, this.curY);
-      this.doc.setDrawColor(color);
-      this.doc.setTextColor(txtColor);
-      this.doc.setFontSize(txtSize);
-    }
-  }
-
-  public debugMargins(): void {
-    if (this.debugActive) {
-      const color = this.doc.getDrawColor();
-      this.doc.setDrawColor("green");
-      this.doc.line(
-        this.config.margini.sx,
-        this.config.margini.alto,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.config.margini.alto,
-      );
-      this.doc.line(
-        this.config.margini.sx,
-        this.config.margini.alto,
-        this.config.margini.sx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      this.doc.line(
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.config.margini.alto,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      this.doc.line(
-        this.config.margini.sx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-        this.doc.internal.pageSize.getWidth() - this.config.margini.dx,
-        this.doc.internal.pageSize.getHeight() - this.config.margini.basso,
-      );
-      this.doc.setDrawColor(color);
-    }
-  }
-}
-
-async function loadImageAsBase64(imagePath: string): Promise<string> {
-  const absolutePath = path.resolve(imagePath);
-  const buffer = await fs.readFile(absolutePath);
-  const ext = path.extname(imagePath).slice(1).toLowerCase();
-  const base64 = buffer.toString('base64');
-  return `data:image/${ext};base64,${base64}`;
-}
 
 export class DocumentGenerator {
   private template!: DocumentConfig;
@@ -551,12 +217,6 @@ export class DocumentGenerator {
   }
 
 
-  //#region parseSections
-  private parseBoldSections(content: string): SectionsText[] {
-    return this.templateProcessor.parseBoldSections(content);
-  }
-  //#endregion
-
   //#region drawBox
   private drawBox(
     text: string,
@@ -570,7 +230,7 @@ export class DocumentGenerator {
       0,
       this.config.box.raggio
     ];
-    let section = this.parseBoldSections(text);
+    let section = this.templateProcessor.parseBoldSections(text);
     // writeSection
     let endCur = { x: 0, y: 0 };
     let txtCur = { x: this.curX, y: this.curY };
@@ -629,7 +289,7 @@ export class DocumentGenerator {
       finalCur = this.drawBox(textToWrite, maxWidth, option);
       this.curX = /*this.config.margini.sx +*/ offsetX;
     } else {
-      let section = this.parseBoldSections(textToWrite);
+      let section = this.templateProcessor.parseBoldSections(textToWrite);
       // writeSection
       for (const s of section) {
         let text = s.text.replace(/\*\*/g, '');

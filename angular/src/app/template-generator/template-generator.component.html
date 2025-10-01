@@ -1,0 +1,177 @@
+<div class="template-generator" [formGroup]="form">
+  <h2>Template PDF</h2>
+
+  <section>
+    <h3>Metadati</h3>
+    <label>
+      Versione
+      <input formControlName="versione" placeholder="Versione" />
+    </label>
+  </section>
+
+  <section formGroupName="impostazioniPagina">
+    <h3>Impostazioni pagina</h3>
+
+    <div class="section-grid">
+      <div>
+        <h4>Margini</h4>
+        <div formGroupName="margini" class="grid">
+          <label>Sinistra <input formControlName="sx" type="number" /></label>
+          <label>Destra <input formControlName="dx" type="number" /></label>
+          <label>Alto <input formControlName="alto" type="number" /></label>
+          <label>Basso <input formControlName="basso" type="number" /></label>
+        </div>
+      </div>
+
+      <div>
+        <h4>Tipografia</h4>
+        <label>Interlinea <input formControlName="interlinea" type="number" step="0.01" /></label>
+        <label>Stacco riga <input formControlName="staccoriga" type="number" /></label>
+        <label>Rientro <input formControlName="rientro" type="number" /></label>
+      </div>
+
+      <div>
+        <h4>Box testo</h4>
+        <div formGroupName="box" class="grid">
+          <label>Background <input formControlName="background" type="color" /></label>
+          <label>Raggio <input formControlName="raggio" type="number" step="0.1" /></label>
+          <label>Padding <input formControlName="padding" type="number" step="0.1" /></label>
+          <label>Spessore linea <input formControlName="lineWidth" type="number" step="0.01" /></label>
+          <label>Colore linea <input formControlName="lineColor" type="color" /></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="fonts">
+      <h4>Fonts</h4>
+      <div formArrayName="fonts">
+        <div *ngFor="let font of fonts.controls; let i = index" [formGroupName]="i" class="font-row">
+          <label>ID <input formControlName="id" /></label>
+          <label>Nome <input formControlName="nome" /></label>
+          <label>Dimensione <input formControlName="dimensione" type="number" /></label>
+          <label>Colore <input formControlName="colore" type="color" /></label>
+          <label>Stile <input formControlName="style" /></label>
+          <label>Percorso installazione <input formControlName="installPath" /></label>
+          <button type="button" (click)="removeFont(i)" *ngIf="fonts.length > 1">Rimuovi</button>
+        </div>
+      </div>
+      <button type="button" (click)="addFont()">Aggiungi font</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Contenuti</h3>
+    <div class="content-actions">
+      <label>Aggiungi elemento</label>
+      <div class="buttons">
+        <button type="button" (click)="addContent('testo')">Testo</button>
+        <button type="button" (click)="addContent('testoBox')">Box di testo</button>
+        <button type="button" (click)="addContent('saltoRiga')">Salto riga</button>
+        <button type="button" (click)="addContent('tabella')">Tabella</button>
+        <button type="button" (click)="addContent('punti')">Elenco puntato</button>
+        <button type="button" (click)="addContent('immagine')">Immagine</button>
+      </div>
+    </div>
+
+    <div formArrayName="contenuti" class="content-list">
+      <article *ngFor="let content of contenuti.controls; let i = index" [formGroupName]="i">
+        <header>
+          <span class="badge">{{ content.value.tipo | uppercase }}</span>
+          <button type="button" (click)="removeContent(i)">Rimuovi</button>
+        </header>
+
+        <ng-container [ngSwitch]="content.value.tipo">
+          <div *ngSwitchCase="'testo'" class="field">
+            <label>Testo</label>
+            <textarea formControlName="testo" rows="4"></textarea>
+          </div>
+
+          <div *ngSwitchCase="'testoBox'" class="field" formArrayName="testoBox">
+            <div *ngFor="let row of (content.get('testoBox') as FormArray).controls; let j = index" class="row-with-action">
+              <textarea [formControlName]="j" rows="2"></textarea>
+              <button type="button" (click)="removeTestoBoxRow(i, j)" *ngIf="(content.get('testoBox') as FormArray).length > 1">
+                Rimuovi riga
+              </button>
+            </div>
+            <button type="button" (click)="addTestoBoxRow(i)">Aggiungi riga</button>
+          </div>
+
+          <div *ngSwitchCase="'saltoRiga'" class="field">
+            <label>Numero righe</label>
+            <input formControlName="saltoRiga" type="number" min="1" />
+          </div>
+
+          <div *ngSwitchCase="'tabella'" class="field">
+            <label>Identificativo tabella</label>
+            <input formControlName="tabella" placeholder="Es. TABLE1" />
+          </div>
+
+          <div *ngSwitchCase="'punti'" class="field" formArrayName="punti">
+            <div *ngFor="let point of (content.get('punti') as FormArray).controls; let j = index" [formGroupName]="j" class="bullet">
+              <label>Titolo</label>
+              <input formControlName="titolo" />
+
+              <div formArrayName="sottopunti" class="subpoints">
+                <div
+                  *ngFor="let subPoint of (point.get('sottopunti') as FormArray).controls; let k = index"
+                  [formGroupName]="k"
+                  class="subpoint"
+                >
+                  <label>Titolo</label>
+                  <input formControlName="titolo" />
+
+                  <div formArrayName="contenuto" class="subpoint-content">
+                    <div *ngFor="let row of (subPoint.get('contenuto') as FormArray).controls; let r = index" class="row-with-action">
+                      <input [formControlName]="r" />
+                      <button type="button" (click)="removeSubPointContentRow(i, j, k, r)" *ngIf="(subPoint.get('contenuto') as FormArray).length > 1">
+                        Rimuovi riga
+                      </button>
+                    </div>
+                    <button type="button" (click)="addSubPointContentRow(i, j, k)">Aggiungi riga</button>
+                  </div>
+
+                  <button type="button" (click)="removeSubPoint(i, j, k)" *ngIf="(point.get('sottopunti') as FormArray).length > 1">
+                    Rimuovi sottoparagrafo
+                  </button>
+                </div>
+                <button type="button" (click)="addSubPoint(i, j)">Aggiungi sottoparagrafo</button>
+              </div>
+
+              <button type="button" (click)="removeBulletPoint(i, j)" *ngIf="(content.get('punti') as FormArray).length > 1">
+                Rimuovi sezione
+              </button>
+            </div>
+            <button type="button" (click)="addBulletPoint(i)">Aggiungi sezione</button>
+          </div>
+
+          <div *ngSwitchCase="'immagine'" class="field" formGroupName="immagine">
+            <label>Percorso</label>
+            <input formControlName="path" />
+
+            <div class="grid" formGroupName="posizione">
+              <label>X <input formControlName="x" type="number" /></label>
+              <label>Y <input formControlName="y" type="number" /></label>
+            </div>
+
+            <div class="grid" formGroupName="dimensioni">
+              <label>Larghezza <input formControlName="width" type="number" /></label>
+              <label>Altezza <input formControlName="height" type="number" /></label>
+            </div>
+
+            <label>Coefficiente dimensioni <input formControlName="coeffDim" type="number" step="0.001" /></label>
+          </div>
+        </ng-container>
+      </article>
+    </div>
+  </section>
+
+  <section class="actions">
+    <button type="button" (click)="loadExample()">Carica esempio</button>
+    <button type="button" (click)="downloadTemplate()" [disabled]="form.invalid">Scarica JSON</button>
+  </section>
+
+  <section>
+    <h3 class="preview-title">Anteprima JSON</h3>
+    <pre>{{ getTemplateJson() }}</pre>
+  </section>
+</div>

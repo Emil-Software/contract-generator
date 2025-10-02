@@ -9,7 +9,7 @@ import {
 import { TemplateService } from './template.service';
 import { CreateTemplateDto, CreateTemplateResponse } from './dto/create-template.dto';
 import { UpdateContentDto, UpdateTemplateDto, UpdateTemplateResponse } from './dto/update-template.dto';
-import { GenerateDocumentDto, GenerateDocumentResponse } from './dto/generate-document.dto';
+
 
 @ApiTags('templates')
 @Controller('templates')
@@ -49,11 +49,4 @@ export class TemplateController {
     return this.templateService.updateContent(body);
   }
 
-  @Post('generate')
-  @ApiOperation({ summary: 'Generate a document using the provided template configuration.' })
-  @ApiBody({ type: GenerateDocumentDto })
-  @ApiOkResponse({ type: GenerateDocumentResponse })
-  generateDocument(@Body() body: GenerateDocumentDto) {
-    return this.templateService.generateDocument(body);
-  }
 }

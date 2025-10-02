@@ -37,9 +37,6 @@
       "testo": "Questo è un testo di prova, potrebbe essere una intestazione con il **nome azienda**"
     },
     {
-      "tabella": "TABLE1"
-    },
-    {
       "punti": [
         {
           "titolo": "1. Elenco",
@@ -90,7 +87,7 @@
     },
     {
       "immagine": {
-        "path": "./logo.png",
+        "path": "./assets/logo.png",
         "posizione": [
           0,
           0

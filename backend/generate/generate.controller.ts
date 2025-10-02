@@ -12,7 +12,7 @@ export class GenerateController {
 		private generateService: GenerateService
 	) { }
 
-	@Post('generate')
+	@Post()
 	@ApiOperation({ summary: 'Generate a document using the provided template configuration.' })
 	@ApiBody({ type: GenerateDocumentDto })
 	@ApiOkResponse({ type: GenerateDocumentResponse })

@@ -86,6 +86,9 @@
       ]
     },
     {
+      "tabella": "PRICE_TABLE"
+    },
+    {
       "immagine": {
         "path": "./assets/logo.png",
         "posizione": [

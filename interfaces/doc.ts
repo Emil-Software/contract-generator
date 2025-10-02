@@ -81,6 +81,10 @@ export interface Content {
    * parameters for image
    */
   immagini: ImageParams;
+  /**
+   * ancora per la tabella
+   */
+  tabella: string;
 
 };
 

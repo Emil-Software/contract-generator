@@ -1,10 +1,12 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { TemplateGenerator } from '../../services/TemplateGenerator';
 import { CreateTemplateDto, CreateTemplateResponse } from './dto/create-template.dto';
-import { UpdateTemplateDto, UpdateTemplateResponse } from './dto/update-template.dto';
+import { UpdateContentDto, UpdateTemplateDto, UpdateTemplateResponse } from './dto/update-template.dto';
 import { DocumentConfig } from '../../interfaces/doc';
 import { GenerateDocumentDto, GenerateDocumentResponse } from './dto/generate-document.dto';
 import { DocumentGenerator } from '../../ContractGenerator';
+
+const DEFAULT_PATH_CONFIG = 'config.json';
 
 @Injectable()
 export class TemplateService {
@@ -35,7 +37,9 @@ export class TemplateService {
 
   async loadTemplate(path: string | undefined): Promise<DocumentConfig> {
     if (!path) {
-      throw new BadRequestException('Query parameter "path" is required to load a template.');
+      console.warn("default config.json");
+      path = 'config.json';
+      // throw new BadRequestException('Query parameter "path" is required to load a template.');
     }
     const generator = new TemplateGenerator(path);
     return generator.load();
@@ -61,6 +65,13 @@ export class TemplateService {
     return { template };
   }
 
+  async updateContent(dto: UpdateContentDto) {
+    if (!dto.elenco && !dto.testo) {
+      throw new BadRequestException('No content given.');
+    }
+    const generator = new TemplateGenerator();
+  }
+
   async generateDocument(dto: GenerateDocumentDto): Promise<GenerateDocumentResponse> {
     if (!dto.params) {
       throw new BadRequestException('params is required to generate a document.');
@@ -69,7 +80,7 @@ export class TemplateService {
     if (!dto.config && !dto.configPath) {
       throw new BadRequestException('Either config or configPath must be provided to generate a document.');
     }
-
+    console.log("config path ", dto.configPath);
     const generator = new DocumentGenerator(dto.configPath);
 
     if (dto.config) {

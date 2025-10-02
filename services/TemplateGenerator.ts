@@ -1,10 +1,20 @@
-import { promises as fs } from 'fs';
+import { promises as fs, statSync } from 'fs';
+import * as path from 'path';
 import { DocumentConfig, PageSettings } from "../interfaces/doc";
 
 const DEFAULT_TEMPLATE: DocumentConfig = {
   versione: "1.0.0",
   impostazioniPagina: {
-    fonts: [],
+    fonts: [
+      {
+        id: "default",
+        nome: "Helvetica",
+        dimensione: 8,
+        colore: "#000000",
+        style: "normal",
+        installPath: "helvetica"
+      }
+    ],
     margini: {
       sx: 8,
       dx: 8,
@@ -25,8 +35,23 @@ const DEFAULT_TEMPLATE: DocumentConfig = {
   contenuti: [],
 };
 
+const DEFAULT_PATH_CONFIG: string = 'config.json';
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
+}
+
+function isImage(imgPath: string): boolean {
+  const isFile = statSync(imgPath).isFile();
+  if (!isFile) {
+    return false;
+  }
+  const imgExt = [ ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".tiff", ".tif", ".svg", ".heif", ".heic", ".raw", ".ico" ];
+  const ext = path.extname(imgPath);
+  
+  if (!imgExt.includes(ext)) {
+    return false;
+  }
 }
 
 export class TemplateGenerator {
@@ -148,4 +173,6 @@ export class TemplateGenerator {
 
     return merged;
   }
+
+
 }

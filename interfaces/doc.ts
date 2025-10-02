@@ -52,7 +52,7 @@ export interface DocumentFont {
   /**
    * not every font has all the styles
    */
-  style?: 'bold' | 'italic' | 'normal' | 'bolditalic'
+  style?: 'bold' | 'italic' | 'normal' | 'bolditalic' | string;
 }
 
 

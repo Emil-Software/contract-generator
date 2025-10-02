@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { DocumentConfig } from '../../../interfaces/doc';
+import { DocumentConfig, Elenco } from '../../../interfaces/doc';
 
 export class UpdateTemplateDto {
   @ApiProperty({ description: 'Path to the configuration file to load and optionally persist after the update.' })
@@ -12,8 +12,19 @@ export class UpdateTemplateDto {
   persist?: boolean;
 }
 
+export class UpdateContentDto {
+  @ApiProperty({ description: 'Path to the configuration file to load and optionally persist after the update.' })
+  path?: string;
+
+  @ApiPropertyOptional({ description: 'Partial configuration containing only the properties to update.', type: () => Object })
+  testo: string | string[];
+
+  @ApiPropertyOptional({description: ''})
+  elenco: Elenco
+}
+
 export class UpdateTemplateResponse {
-  @ApiProperty({ description: 'Updated template configuration.', type: () => Object })
+  @ApiProperty({ description: 'Updated template configuration.'})
   template!: DocumentConfig;
 
   @ApiPropertyOptional({ description: 'Path where the updated template was saved.' })

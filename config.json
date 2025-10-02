@@ -1,0 +1,106 @@
+{
+  "versione": "0.1.1",
+  "impostazioniPagina": {
+    "fonts": [
+      {
+        "id": "default",
+        "nome": "helvetica",
+        "dimensione": 8,
+        "colore": "#000000",
+        "style": "bold"
+      }
+    ],
+    "margini": {
+      "sx": 10,
+      "dx": 10,
+      "alto": 10,
+      "basso": 10
+    },
+    "interlinea": 1.05,
+    "staccoriga": 5,
+    "rientro": 3,
+    "box": {
+      "background": "#ffffff",
+      "raggio": 2,
+      "padding": 2,
+      "lineWidth": 0.12,
+      "lineColor": "#000000"
+    }
+  },
+  "contenuti": [
+    {
+      "testoBox": [
+        "Contratto di servizio tra **pincoPallino Joe srl** e $cliente:denominazione$",
+        "Altro testo su una nuova riga per vedere dove arriva il cursore",
+        "Magari proviamo a scendere ulteriormente"
+      ],
+      "testo": "Questo è un testo di prova, potrebbe essere una intestazione con il **nome azienda**"
+    },
+    {
+      "tabella": "TABLE1"
+    },
+    {
+      "punti": [
+        {
+          "titolo": "1. Elenco",
+          "sottopunti": [
+            {
+              "titolo": "1.1. Servizio fornito da pincoPallino Joe srl",
+              "contenuto": [
+                "pincoPallino Joe si impegna a:",
+                "• Lanciare ",
+                "• Schivare ",
+                "• Piegarsi ",
+                "• Abbassarsi ",
+                "• Schivare "
+              ]
+            },
+            {
+              "titolo": "**1.3. Ordini**",
+              "contenuto": [
+                "Gli **ordini** possono essere caricati:",
+                "• Manualmente tramite lo store e-commerce pincoPallino Joe,",
+                "• Gli ordini devono rispettare i check-out"
+              ]
+            },
+            {
+              "titolo": "2.2. Il pagamento deve avvenire al momento dell'ordine tramite:",
+              "contenuto": [
+                "• Carta di credito",
+                "• SEPA (bonifico bancario)",
+                "• SDD"
+              ]
+            },
+            {
+              "titolo": "3.3. Consegne mancanti o ritardate",
+              "contenuto": [
+                "• Del costo della consegna “saltata”.",
+                "• Del costo della nuova consegna."
+              ]
+            },
+            {
+              "titolo": "7.1. Obblighi del Cliente",
+              "contenuto": [
+                "• Giocare a dodgeball"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "immagine": {
+        "path": "./logo.png",
+        "posizione": [
+          0,
+          0
+        ],
+        "dimensioni": [
+          40,
+          30
+        ],
+        "coeffDim": 0.042
+      }
+    }
+  ]
+}

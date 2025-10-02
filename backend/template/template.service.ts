@@ -77,15 +77,7 @@ export class TemplateService {
       throw new BadRequestException('params is required to generate a document.');
     }
 
-    if (!dto.config && !dto.configPath) {
-      throw new BadRequestException('Either config or configPath must be provided to generate a document.');
-    }
-    console.log("config path ", dto.configPath);
-    const generator = new DocumentGenerator(dto.configPath);
-
-    if (dto.config) {
-      generator.setConfig(dto.config);
-    }
+    const generator = new DocumentGenerator(DEFAULT_PATH_CONFIG);
 
     try {
       const document = await generator.generateDocument(dto.params);

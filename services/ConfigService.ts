@@ -1,15 +1,17 @@
 import { promises as fs } from 'fs';
 import { DocumentConfig, PageSettings, Content, ConfigData } from "../interfaces/doc";
 
+const DEFAULT_CONFIG_PATH = 'config.json';
+
 export class ConfigService {
-  private readonly configPath?: string;
+  private readonly configPath: string;
   private template?: DocumentConfig;
   private pageSettings?: PageSettings;
   private contenuti?: Partial<Content>[];
   private configLoaded = false;
 
   constructor(configPath?: string) {
-    this.configPath = configPath;
+    this.configPath = configPath ?? DEFAULT_CONFIG_PATH;
   }
 
   public setConfig(config: DocumentConfig): void {
@@ -22,9 +24,6 @@ export class ConfigService {
   public async loadConfig(): Promise<ConfigData> {
     if (this.configLoaded) {
       return this.getConfigData();
-    }
-    if (!this.configPath) {
-      throw new Error("No configuration provided.");
     }
     try {
       const data = await fs.readFile(this.configPath, 'utf8');
@@ -50,7 +49,7 @@ export class ConfigService {
     };
   }
 
-  public getConfigPath(): string | undefined {
+  public getConfigPath(): string {
     return this.configPath;
   }
 

@@ -134,6 +134,7 @@ tests/*/*.png
 tests/*/*.pdf
 tests/*.png
 tests/*.pdf
+*.pdf
 
 # visual studios
 .vscode/*

@@ -12,7 +12,7 @@ export class GenerateDocumentDto {
   //#endregion
   
   //#region config
-  @ApiPropertyOptional({description: 'External json for configuration'})
+  @ApiPropertyOptional({ description: 'External json for configuration', type: () => Object })
   config?: DocumentConfig;
   
   //#region Client-Supplier

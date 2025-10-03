@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentConfig } from '../../../interfaces/doc';
 
+//#region GenerateDocumentDto
 export class GenerateDocumentDto {
   
   //#region fileName
@@ -12,9 +13,12 @@ export class GenerateDocumentDto {
   //#endregion
   
   //#region config
-  @ApiPropertyOptional({ description: 'External json for configuration', type: () => Object })
+  /** allow to pass a json to use for the template of the document */
+  @ApiHideProperty()
   config?: DocumentConfig;
-  
+  //#endregion
+
+
   //#region Client-Supplier
   @ApiPropertyOptional({ 
     description: 'Business name for the client', 
@@ -96,7 +100,9 @@ export class GenerateDocumentDto {
   tableBody?: any[][];
   //#endregion
 }
+//#endregion
 
+//#region GenerateDocumentResponse
 export class GenerateDocumentResponse {
   @ApiProperty({ description: 'Base64-encoded PDF document generated from the template.' })
   document!: string;
@@ -104,3 +110,4 @@ export class GenerateDocumentResponse {
   @ApiProperty({ description: 'Path on disk where the generated PDF has been saved.' })
   filePath!: string;
 }
+//#endregion

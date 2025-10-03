@@ -37,7 +37,7 @@ export class GenerateService {
 
       return {
         document,
-        filePath: fileName,
+        filePath: fileName
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

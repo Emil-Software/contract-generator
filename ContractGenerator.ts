@@ -419,8 +419,8 @@ class CursorManager {
       if (param.offsetX) {
         this.curX += param.offsetX;
       }
-    } else {
-      // throw new Error(`${param.yPosition} is not a valid position for y coordinate`);
+    } 
+    else {
       console.warn(`${param.yPosition} is not a valid position for y coordinate`);
     }
   }
